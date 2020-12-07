@@ -18,26 +18,35 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     signal RAM: ram_array;
     signal IR: std_logic_vector(15 downto 0);
     signal IR_N: std_logic_vector(15 downto 0);
-    alias OPCODE: std_logic_vector(7 downto 0) is IR(15 downto 8);
-    alias ARG: std_logic_vector(7 downto 0) is IR(7 downto 0);
+    alias OPCODE_R: std_logic_vector(9 downto 0) is IR(15 downto 6);
+    alias ARG_R_DDD: std_logic_vector(2 downto 0) is IR(5 downto 3);
+    alias ARG_R_SSS: std_logic_vector(2 downto 0) is IR(2 downto 0);
+    alias OPCODE_I: std_logic_vector(4 downto 0) is IR(15 downto 11);
+    alias ARG_I_DDD: std_logic_vector(2 downto 0) is IR(10 downto 8);
+    alias ARG_I_K: std_logic_vector(7 downto 0) is IR(7 downto 0);
+    
     type STATE_t is (S_FETCH, S_EX);
     signal STATE, STATE_N: STATE_t;
     signal PC: std_logic_vector(7 downto 0);
     signal PC_N: std_logic_vector(7 downto 0);
-    constant C_NOP: std_logic_vector( 7 downto 0) := "00000000";
-    constant C_OUTP: std_logic_vector( 7 downto 0) := "00000001";
-    constant C_B: std_logic_vector( 7 downto 0) := "00000010";
-    constant C_BZ: std_logic_vector( 7 downto 0) := "00000011";
-    constant MC_LDI: std_logic_vector(15 downto 0) := "10000-----------";
-    constant C_LDI: std_logic_vector(4 downto 0) := "10000";
     constant MC_MOV: std_logic_vector(15 downto 0) := "0000000000------";
     constant C_MOV: std_logic_vector(9 downto 0) := "0000000000";
     constant MC_LD: std_logic_vector(15 downto 0) := "0000000001------";
     constant C_LD: std_logic_vector(9 downto 0) := "0000000001";
-    constant MC_LDS: std_logic_vector(15 downto 0) := "10001-----------";
-    constant C_LDS: std_logic_vector(4 downto 0) := "10001";
     constant MC_ST: std_logic_vector(15 downto 0) := "0000000010------";
     constant C_ST: std_logic_vector(9 downto 0) := "0000000010";
+    constant MC_NOP: std_logic_vector(15 downto 0) := "01000001--------";
+    constant C_NOP: std_logic_vector( 7 downto 0) := "01000001";
+    constant MC_OUTP: std_logic_vector(15 downto 0) := "01000010--------";
+    constant C_OUTP: std_logic_vector( 7 downto 0) := "01000010";
+    constant MC_B: std_logic_vector(15 downto 0) := "01000011--------";
+    constant C_B: std_logic_vector( 7 downto 0) := "01000011";
+    constant MC_BZ: std_logic_vector(15 downto 0) := "01000100--------";
+    constant C_BZ: std_logic_vector( 7 downto 0) := "01000100";
+    constant MC_LDI: std_logic_vector(15 downto 0) := "10000-----------";
+    constant C_LDI: std_logic_vector(4 downto 0) := "10000";
+    constant MC_LDS: std_logic_vector(15 downto 0) := "10001-----------";
+    constant C_LDS: std_logic_vector(4 downto 0) := "10001";
     constant MC_STS: std_logic_vector(15 downto 0) := "10010-----------";
     constant C_STS: std_logic_vector(4 downto 0) := "10010";
     --constant ROM: rom_t := (C_OUTP & x"FF", C_OUTP & x"55", C_BZ & x"02",C_OUTP & x"00", C_NOP & x"00", C_B & x"00", others => x"0000");
@@ -88,7 +97,7 @@ begin
         end if;
     end process;
     
-    process(OPCODE, ARG, Z, IR, PC, STATE, RESET)
+    process(Z, IR, PC, STATE, RESET)
     begin
         if RESET = '1' then
             IR_N <= (others => '0');
@@ -98,22 +107,38 @@ begin
                 when S_FETCH =>
                     IR_N <= ROM(to_integer(unsigned(PC_N)));
                 when S_EX =>
-                    case(OPCODE) is
-                        when C_NOP =>
-                            PC_N <= std_logic_vector(unsigned(PC_N) + 1);
-                        when C_OUTP =>
-                            GPIO <= ARG;
-                            PC_N <= std_logic_vector(unsigned(PC_N) + 1);
-                        when C_B =>
-                            PC_N <= ARG;
-                        when others =>
-                            if Z = '1' then
-                                PC_N <= ARG;
-                            else
-                                PC_N <= std_logic_vector(unsigned(PC_N) + 1); 
-                            end if;
-
-                    end case;
+                    if std_match(IR, MC_LDI) then
+                        R(to_integer(unsigned(ARG_I_DDD))) <= ARG_I_K;
+                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                    elsif std_match(IR, MC_MOV) then
+                        R(to_integer(unsigned(ARG_R_DDD))) <= R(to_integer(unsigned(ARG_R_SSS)));
+                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                    elsif std_match(IR, MC_LD) then
+                        R(to_integer(unsigned(ARG_R_DDD))) <= RAM(to_integer(unsigned(R(to_integer(unsigned(ARG_R_SSS))))));
+                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                    elsif std_match(IR, MC_LDS) then
+                        R(to_integer(unsigned(ARG_I_DDD))) <= RAM(to_integer(unsigned(ARG_I_K)));
+                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                    elsif std_match(IR, MC_ST) then
+                        RAM(to_integer(unsigned(R(to_integer(unsigned(ARG_R_DDD)))))) <= R(to_integer(unsigned(ARG_R_SSS)));
+                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                    elsif std_match(IR, MC_STS) then
+                        RAM(to_integer(unsigned(ARG_I_K))) <= R(to_integer(unsigned(ARG_I_DDD)));
+                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                    elsif std_match(IR, MC_NOP) then
+                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                    elsif std_match(IR, MC_OUTP) then
+                        GPIO <= ARG_I_K;
+                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                    elsif std_match(IR, MC_B) then
+                        PC_N <= ARG_I_K;
+                    elsif std_match(IR, MC_BZ) then
+                        if Z = '1' then
+                            PC_N <= ARG_I_K;
+                        else
+                            PC_N <= std_logic_vector(unsigned(PC_N) + 1); 
+                        end if;
+                    end if;
             end case;
         end if;
     end process;
