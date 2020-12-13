@@ -13,28 +13,48 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     --type rom_t is array (0 to 31) of std_logic_vector(15 downto 0);
     type rom_array is array (0 to 31) of std_logic_vector(15 downto 0);
     type reg_array is array (0 to 7) of std_logic_vector(7 downto 0);
-    signal R: reg_array;
     type ram_array is array (0 to 31) of std_logic_vector(7 downto 0);
+    
+    signal R: reg_array;
     signal RAM: ram_array;
     signal IR: std_logic_vector(15 downto 0);
     signal IR_N: std_logic_vector(15 downto 0);
+    signal SREG: std_logic_vector(7 downto 0);
+    
     alias OPCODE_R: std_logic_vector(9 downto 0) is IR(15 downto 6);
     alias ARG_R_DDD: std_logic_vector(2 downto 0) is IR(5 downto 3);
     alias ARG_R_SSS: std_logic_vector(2 downto 0) is IR(2 downto 0);
     alias OPCODE_I: std_logic_vector(4 downto 0) is IR(15 downto 11);
     alias ARG_I_DDD: std_logic_vector(2 downto 0) is IR(10 downto 8);
     alias ARG_I_K: std_logic_vector(7 downto 0) is IR(7 downto 0);
+    alias SREG_Z: std_logic_vector(0 downto 0) is SREG(0 downto 0);
     
     type STATE_t is (S_FETCH, S_EX);
     signal STATE, STATE_N: STATE_t;
     signal PC: std_logic_vector(7 downto 0);
     signal PC_N: std_logic_vector(7 downto 0);
+    
     constant MC_MOV: std_logic_vector(15 downto 0) := "0000000000------";
     constant C_MOV: std_logic_vector(9 downto 0) := "0000000000";
     constant MC_LD: std_logic_vector(15 downto 0) := "0000000001------";
     constant C_LD: std_logic_vector(9 downto 0) := "0000000001";
     constant MC_ST: std_logic_vector(15 downto 0) := "0000000010------";
     constant C_ST: std_logic_vector(9 downto 0) := "0000000010";
+    constant MC_ADC: std_logic_vector(15 downto 0) := "0000000011------";
+    constant C_ADC: std_logic_vector(9 downto 0) := "0000000011";
+    constant MC_SBC: std_logic_vector(15 downto 0) := "0000000100------";
+    constant C_SBC: std_logic_vector(9 downto 0) := "0000000100";
+    constant MC_MUL: std_logic_vector(15 downto 0) := "0000000101------";
+    constant C_MUL: std_logic_vector(9 downto 0) := "0000000101";
+    constant MC_MULS: std_logic_vector(15 downto 0) := "0000000110------";
+    constant C_MULS: std_logic_vector(9 downto 0) := "0000000110";
+    constant MC_AND: std_logic_vector(15 downto 0) := "0000000111------";
+    constant C_AND: std_logic_vector(9 downto 0) := "0000000111";
+    constant MC_OR: std_logic_vector(15 downto 0) := "0000001000------";
+    constant C_OR: std_logic_vector(9 downto 0) := "0000001000";
+    constant MC_XOR: std_logic_vector(15 downto 0) := "0000001001------";
+    constant C_XOR: std_logic_vector(9 downto 0) := "0000001001";
+    
     constant MC_NOP: std_logic_vector(15 downto 0) := "01000001--------";
     constant C_NOP: std_logic_vector( 7 downto 0) := "01000001";
     constant MC_OUTP: std_logic_vector(15 downto 0) := "01000010--------";
@@ -43,12 +63,28 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     constant C_B: std_logic_vector( 7 downto 0) := "01000011";
     constant MC_BZ: std_logic_vector(15 downto 0) := "01000100--------";
     constant C_BZ: std_logic_vector( 7 downto 0) := "01000100";
+    constant MC_BSET: std_logic_vector(15 downto 0) := "01000101--------"; 
+    constant C_BSET: std_logic_vector(7 downto 0) := "01000101";
+    constant MC_BCLR: std_logic_vector(15 downto 0) := "01000110--------";
+    constant C_BCLR: std_logic_vector(7 downto 0) := "01000110";
+    constant MC_ADCI: std_logic_vector(15 downto 0) := "01000111--------";
+    constant C_ADCI: std_logic_vector(7 downto 0) := "01000111";
+    constant MC_SBCI: std_logic_vector(15 downto 0) := "01001000--------";
+    constant C_SBCI: std_logic_vector(7 downto 0) := "01001000";
+    constant MC_ANDI: std_logic_vector(15 downto 0) := "01001001--------";
+    constant C_ANDI: std_logic_vector(7 downto 0) := "01001001";
+    constant MC_ORI: std_logic_vector(15 downto 0) := "01001010--------";
+    constant C_ORI: std_logic_vector(7 downto 0) := "01001010";
+    constant MC_XORI: std_logic_vector(15 downto 0) := "01001011--------";
+    constant C_XORI: std_logic_vector(7 downto 0) := "01001011";
+    
     constant MC_LDI: std_logic_vector(15 downto 0) := "10000-----------";
     constant C_LDI: std_logic_vector(4 downto 0) := "10000";
     constant MC_LDS: std_logic_vector(15 downto 0) := "10001-----------";
     constant C_LDS: std_logic_vector(4 downto 0) := "10001";
     constant MC_STS: std_logic_vector(15 downto 0) := "10010-----------";
     constant C_STS: std_logic_vector(4 downto 0) := "10010";
+    
     --constant ROM: rom_t := (C_OUTP & x"FF", C_OUTP & x"55", C_BZ & x"02",C_OUTP & x"00", C_NOP & x"00", C_B & x"00", others => x"0000");
     constant ROM: rom_array := (
         C_LDI & "001" & x"35", -- za³adowanie wartoœci x35 do rejestru R1
