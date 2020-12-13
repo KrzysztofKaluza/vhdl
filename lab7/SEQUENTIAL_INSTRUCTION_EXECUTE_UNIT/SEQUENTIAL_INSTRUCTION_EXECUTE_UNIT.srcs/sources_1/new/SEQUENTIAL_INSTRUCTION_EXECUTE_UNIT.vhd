@@ -174,6 +174,34 @@ begin
                         else
                             PC_N <= std_logic_vector(unsigned(PC_N) + 1); 
                         end if;
+                    elsif std_match(IR, MC_ADC) then
+                    
+                    elsif std_match(IR, MC_SBC) then
+                    
+                    elsif std_match(IR, MC_MUL) then
+                    
+                    elsif std_match(IR, MC_MULS) then
+                    
+                    elsif std_match(IR, MC_AND) then
+                    
+                    elsif std_match(IR, MC_OR) then
+                    
+                    elsif std_match(IR, MC_XOR) then
+                    
+                    elsif std_match(IR, MC_BSET) then
+                        SREG <= SREG or ARG_I_K;
+                    elsif std_match(IR, MC_BCLR) then
+                        SREG <= SREG and not ARG_I_K;
+                    elsif std_match(IR, MC_ADCI) then
+                    
+                    elsif std_match(IR, MC_SBCI) then
+                    
+                    elsif std_match(IR, MC_ANDI) then
+                    
+                    elsif std_match(IR, MC_ORI) then
+                    
+                    elsif std_match(IR, MC_XORI) then
+                    
                     end if;
             end case;
         end if;
