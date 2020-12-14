@@ -10,7 +10,6 @@ entity SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
 end SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT;
 
 architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
-    --type rom_t is array (0 to 31) of std_logic_vector(15 downto 0);
     type rom_array is array (0 to 31) of std_logic_vector(15 downto 0);
     type reg_array is array (0 to 7) of std_logic_vector(7 downto 0);
     type ram_array is array (0 to 31) of std_logic_vector(7 downto 0);
@@ -30,7 +29,6 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     alias OPCODE_I: std_logic_vector(4 downto 0) is IR(15 downto 11);
     alias ARG_I_DDD: std_logic_vector(2 downto 0) is IR(10 downto 8);
     alias ARG_I_K: std_logic_vector(7 downto 0) is IR(7 downto 0);
-    
     
     type STATE_t is (S_FETCH, S_EX);
     signal STATE, STATE_N: STATE_t;
@@ -66,20 +64,6 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     constant C_B: std_logic_vector( 7 downto 0) := "01000011";
     constant MC_BZ: std_logic_vector(15 downto 0) := "01000100--------";
     constant C_BZ: std_logic_vector( 7 downto 0) := "01000100";
-    constant MC_BSET: std_logic_vector(15 downto 0) := "01000101--------"; 
-    constant C_BSET: std_logic_vector(7 downto 0) := "01000101";
-    constant MC_BCLR: std_logic_vector(15 downto 0) := "01000110--------";
-    constant C_BCLR: std_logic_vector(7 downto 0) := "01000110";
-    constant MC_ADCI: std_logic_vector(15 downto 0) := "01000111--------";
-    constant C_ADCI: std_logic_vector(7 downto 0) := "01000111";
-    constant MC_SBCI: std_logic_vector(15 downto 0) := "01001000--------";
-    constant C_SBCI: std_logic_vector(7 downto 0) := "01001000";
-    constant MC_ANDI: std_logic_vector(15 downto 0) := "01001001--------";
-    constant C_ANDI: std_logic_vector(7 downto 0) := "01001001";
-    constant MC_ORI: std_logic_vector(15 downto 0) := "01001010--------";
-    constant C_ORI: std_logic_vector(7 downto 0) := "01001010";
-    constant MC_XORI: std_logic_vector(15 downto 0) := "01001011--------";
-    constant C_XORI: std_logic_vector(7 downto 0) := "01001011";
     
     constant MC_LDI: std_logic_vector(15 downto 0) := "10000-----------";
     constant C_LDI: std_logic_vector(4 downto 0) := "10000";
@@ -87,23 +71,32 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     constant C_LDS: std_logic_vector(4 downto 0) := "10001";
     constant MC_STS: std_logic_vector(15 downto 0) := "10010-----------";
     constant C_STS: std_logic_vector(4 downto 0) := "10010";
+    constant MC_BSET: std_logic_vector(15 downto 0) := "10011-----------"; 
+    constant C_BSET: std_logic_vector(4 downto 0) := "10011";
+    constant MC_BCLR: std_logic_vector(15 downto 0) := "10100-----------";
+    constant C_BCLR: std_logic_vector(4 downto 0) := "10100";
+    constant MC_ADCI: std_logic_vector(15 downto 0) := "10101-----------";
+    constant C_ADCI: std_logic_vector(4 downto 0) := "10101";
+    constant MC_SBCI: std_logic_vector(15 downto 0) := "10110-----------";
+    constant C_SBCI: std_logic_vector(4 downto 0) := "10110";
+    constant MC_ANDI: std_logic_vector(15 downto 0) := "10111-----------";
+    constant C_ANDI: std_logic_vector(4 downto 0) := "10111";
+    constant MC_ORI: std_logic_vector(15 downto 0) := "11000-----------";
+    constant C_ORI: std_logic_vector(4 downto 0) := "11000";
+    constant MC_XORI: std_logic_vector(15 downto 0) := "11001-----------";
+    constant C_XORI: std_logic_vector(4 downto 0) := "11001";
     
-    --constant ROM: rom_t := (C_OUTP & x"FF", C_OUTP & x"55", C_BZ & x"02",C_OUTP & x"00", C_NOP & x"00", C_B & x"00", others => x"0000");
     constant ROM: rom_array := (
         C_LDI & "001" & x"35", -- za³adowanie wartoœci x35 do rejestru R1
-        C_LDI & "100" & x"79", -- za³adowanie wartoœci x79 do rejestru R4
-        C_MOV & "101" & "001", -- przes³anie zawartoœci rejestru R1 do rejestru R5
-        C_LDI & "001" & x"02", -- za³adowanie wartoœci x02 do rejestru R1
-        C_ST & "001" & "100", -- zapisanie zawartoœci rejestru R4 do pamiêci RAM
-        -- pod adres zawarty w R1 (adres x02)
-        C_STS & "100" & x"05", -- zapisanie zawartoœci rejestru R4 do pamiêci RAM
-        -- pod adres x05
-        C_LD & "110" & "001", -- za³adowanie wartoœci z pamiêci RAM spod adresu
-        -- zawartego w rejestrze R1 do rejestru R6
-        C_LDS & "111" & x"05", -- za³adowanie wartoœci z pamiêci RAM spod adresu
-        -- x05 do rejestru R7
-        C_B & x"00", -- skok na poczatek programu
+        C_LDI & "010" & x"12", -- za³adowanie wartoœci x12 do rejestru R2
+        C_ADC & "010" & "001", -- dodanie zawartoœci rejestru R1 do rejestru R2
+        C_ADCI & "010" & x"21", -- dodanie sta³ej x21 do rejestru R2
+        -- Tutaj nale¿y umieœciæ analogiczny kod, sprawdzaj¹cy dzia³anie
+        -- pozosta³ych zaimplementowanych rozkazów. Nale¿y równie¿ sprawdziæ
+        -- wp³yw flagi C, któr¹ mo¿na modyfikowaæ rozkazami BSET i BCLR
+        C_B & x"00", -- skok do pocz¹tku programu
         others => x"0000");
+
 begin
 
     process(CLK, RESET)
@@ -144,7 +137,7 @@ begin
         end if;
     end process;
     
-    process(RAM, SREG, R, Z, IR, PC, STATE, RESET)
+    process(RAM, SREG, R, Z, IR, PC, STATE, RESET, PC_N, R_N)
         variable src1, src2: signed(7 downto 0);
         variable res: signed(8 downto 0);
         variable mulres: signed(15 downto 0);
@@ -230,7 +223,8 @@ begin
                         else
                             SREG_N(1)<='0';
                         end if;
-                        R_N(to_integer(unsigned(ARG_R_DDD))) <= std_logic_vector(unsigned(mulres));
+                        R_N(to_integer(unsigned(ARG_R_DDD))+1) <= std_logic_vector(unsigned(mulres(15 downto 8)));
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= std_logic_vector(unsigned(mulres(7 downto 0)));
                         PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_MULS) then
                         src1:=signed(R(to_integer(unsigned(ARG_R_DDD))));
@@ -243,7 +237,8 @@ begin
                         else
                             SREG_N(1)<='0';
                         end if;
-                        R_N(to_integer(unsigned(ARG_R_DDD))) <= std_logic_vector(mulres);
+                        R_N(to_integer(unsigned(ARG_R_DDD))+1) <= std_logic_vector(mulres(15 downto 8));
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= std_logic_vector(mulres(7 downto 0));
                         PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_AND) then          
                         R_N(to_integer(unsigned(ARG_R_DDD))) <= R(to_integer(unsigned(ARG_R_DDD))) and R(to_integer(unsigned(ARG_R_SSS)));
@@ -276,7 +271,7 @@ begin
                         SREG_N <= SREG and not ARG_I_K;
                         PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_ADCI) then
-                        src1:=signed(R(to_integer(unsigned(ARG_R_DDD))));
+                        src1:=signed(R(to_integer(unsigned(ARG_I_DDD))));
                         src2:=signed(ARG_I_K);
                         res:= x"00" & SREG(0);
                         res:=res + ('0' & src1) + ('0' & src2);
@@ -286,10 +281,10 @@ begin
                         else
                             SREG_N(1)<='0';
                         end if;
-                        R_N(to_integer(unsigned(ARG_R_DDD))) <= std_logic_vector(unsigned(res(7 downto 0))); 
+                        R_N(to_integer(unsigned(ARG_I_DDD))) <= std_logic_vector(unsigned(res(7 downto 0))); 
                         PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_SBCI) then
-                        src1:=signed(R(to_integer(unsigned(ARG_R_DDD))));
+                        src1:=signed(R(to_integer(unsigned(ARG_I_DDD))));
                         src2:=signed(ARG_I_K);
                         res:= x"00" & SREG(0);
                         res:= ('0' & src1) - ('0' & src2) - res;
@@ -299,11 +294,11 @@ begin
                         else
                             SREG_N(1)<='0';
                         end if;
-                        R_N(to_integer(unsigned(ARG_R_DDD))) <= std_logic_vector(res(7 downto 0));
+                        R_N(to_integer(unsigned(ARG_I_DDD))) <= std_logic_vector(res(7 downto 0));
                         PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_ANDI) then
-                        R_N(to_integer(unsigned(ARG_R_DDD))) <= R(to_integer(unsigned(ARG_R_DDD))) and ARG_I_K;
-                        if R_N(to_integer(unsigned(ARG_R_DDD))) = x"00" then
+                        R_N(to_integer(unsigned(ARG_I_DDD))) <= R(to_integer(unsigned(ARG_I_DDD))) and ARG_I_K;
+                        if R_N(to_integer(unsigned(ARG_I_DDD))) = x"00" then
                             SREG_N(1)<='1';
                         else
                             SREG_N(1)<='0';
@@ -311,16 +306,16 @@ begin
                         PC_N <= std_logic_vector(unsigned(PC) + 1);
                         
                     elsif std_match(IR, MC_ORI) then
-                        R_N(to_integer(unsigned(ARG_R_DDD))) <= R(to_integer(unsigned(ARG_R_DDD))) or ARG_I_K;
-                        if R_N(to_integer(unsigned(ARG_R_DDD))) = x"00" then
+                        R_N(to_integer(unsigned(ARG_I_DDD))) <= R(to_integer(unsigned(ARG_I_DDD))) or ARG_I_K;
+                        if R_N(to_integer(unsigned(ARG_I_DDD))) = x"00" then
                             SREG_N(1)<='1';
                         else
                             SREG_N(1)<='0';
                         end if;
                         PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_XORI) then
-                        R_N(to_integer(unsigned(ARG_R_DDD))) <= R(to_integer(unsigned(ARG_R_DDD))) xor ARG_I_K;
-                        if R_N(to_integer(unsigned(ARG_R_DDD))) = x"00" then
+                        R_N(to_integer(unsigned(ARG_I_DDD))) <= R(to_integer(unsigned(ARG_I_DDD))) xor ARG_I_K;
+                        if R_N(to_integer(unsigned(ARG_I_DDD))) = x"00" then
                             SREG_N(1)<='1';
                         else
                             SREG_N(1)<='0';
