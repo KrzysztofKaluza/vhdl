@@ -16,10 +16,13 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     type ram_array is array (0 to 31) of std_logic_vector(7 downto 0);
     
     signal R: reg_array;
+    signal R_N: reg_array;
     signal RAM: ram_array;
+    signal RAM_N: ram_array;
     signal IR: std_logic_vector(15 downto 0);
     signal IR_N: std_logic_vector(15 downto 0);
     signal SREG: std_logic_vector(7 downto 0);
+    signal SREG_N: std_logic_vector(7 downto 0);
     
     alias OPCODE_R: std_logic_vector(9 downto 0) is IR(15 downto 6);
     alias ARG_R_DDD: std_logic_vector(2 downto 0) is IR(5 downto 3);
@@ -27,7 +30,7 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     alias OPCODE_I: std_logic_vector(4 downto 0) is IR(15 downto 11);
     alias ARG_I_DDD: std_logic_vector(2 downto 0) is IR(10 downto 8);
     alias ARG_I_K: std_logic_vector(7 downto 0) is IR(7 downto 0);
-    alias SREG_Z: std_logic_vector(0 downto 0) is SREG(0 downto 0);
+    
     
     type STATE_t is (S_FETCH, S_EX);
     signal STATE, STATE_N: STATE_t;
@@ -127,81 +130,202 @@ begin
         if RESET = '1' then
             IR <= (others => '0');
             PC <= (others => '0');
+            SREG <= (others => '0');
+            for i in 0 to R'high loop
+				R(i) <= x"00";
+			end loop;
+
         elsif rising_edge(CLK) then
             IR <= IR_N;
             PC <= PC_N;
+            R <= R_N;
+            SREG <= SREG_N;
+            RAM <= RAM_N;
         end if;
     end process;
     
-    process(Z, IR, PC, STATE, RESET)
+    process(RAM, SREG, R, Z, IR, PC, STATE, RESET)
+        variable src1, src2: signed(7 downto 0);
+        variable res: signed(8 downto 0);
+        variable mulres: signed(15 downto 0);
     begin
         if RESET = '1' then
             IR_N <= (others => '0');
             PC_N <= (others => '0');
+            SREG_N <= (others => '0');
+            for i in 0 to R'high loop
+				R_N(i) <= x"00";
+			end loop;
+
         else
             case(STATE) is
                 when S_FETCH =>
                     IR_N <= ROM(to_integer(unsigned(PC_N)));
                 when S_EX =>
                     if std_match(IR, MC_LDI) then
-                        R(to_integer(unsigned(ARG_I_DDD))) <= ARG_I_K;
-                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                        R_N(to_integer(unsigned(ARG_I_DDD))) <= ARG_I_K;
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_MOV) then
-                        R(to_integer(unsigned(ARG_R_DDD))) <= R(to_integer(unsigned(ARG_R_SSS)));
-                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= R(to_integer(unsigned(ARG_R_SSS)));
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_LD) then
-                        R(to_integer(unsigned(ARG_R_DDD))) <= RAM(to_integer(unsigned(R(to_integer(unsigned(ARG_R_SSS))))));
-                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= RAM(to_integer(unsigned(R(to_integer(unsigned(ARG_R_SSS))))));
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_LDS) then
-                        R(to_integer(unsigned(ARG_I_DDD))) <= RAM(to_integer(unsigned(ARG_I_K)));
-                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                        R_N(to_integer(unsigned(ARG_I_DDD))) <= RAM(to_integer(unsigned(ARG_I_K)));
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_ST) then
-                        RAM(to_integer(unsigned(R(to_integer(unsigned(ARG_R_DDD)))))) <= R(to_integer(unsigned(ARG_R_SSS)));
-                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                        RAM_N(to_integer(unsigned(R(to_integer(unsigned(ARG_R_DDD)))))) <= R(to_integer(unsigned(ARG_R_SSS)));
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_STS) then
-                        RAM(to_integer(unsigned(ARG_I_K))) <= R(to_integer(unsigned(ARG_I_DDD)));
-                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                        RAM_N(to_integer(unsigned(ARG_I_K))) <= R(to_integer(unsigned(ARG_I_DDD)));
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_NOP) then
-                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_OUTP) then
                         GPIO <= ARG_I_K;
-                        PC_N <= std_logic_vector(unsigned(PC_N) + 1);
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_B) then
                         PC_N <= ARG_I_K;
                     elsif std_match(IR, MC_BZ) then
                         if Z = '1' then
                             PC_N <= ARG_I_K;
                         else
-                            PC_N <= std_logic_vector(unsigned(PC_N) + 1); 
+                            PC_N <= std_logic_vector(unsigned(PC) + 1); 
                         end if;
                     elsif std_match(IR, MC_ADC) then
-                    
+                        src1:=signed(R(to_integer(unsigned(ARG_R_DDD))));
+                        src2:=signed(R(to_integer(unsigned(ARG_R_SSS))));
+                        res:= x"00" & SREG(0);
+                        res:=res + ('0' & src1) + ('0' & src2);
+                        SREG_N(0) <= res(8);
+                        if res(7 downto 0) = x"00" then
+                            SREG_N(1)<='1';
+                        else
+                            SREG_N(1)<='0';
+                        end if;
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= std_logic_vector(unsigned(res(7 downto 0))); 
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_SBC) then
-                    
+                        src1:=signed(R(to_integer(unsigned(ARG_R_DDD))));
+                        src2:=signed(R(to_integer(unsigned(ARG_R_SSS))));
+                        res:= x"00" & SREG(0);
+                        res:= ('0' & src1) - ('0' & src2) - res;
+                        SREG_N(0) <= res(8);
+                        if res(7 downto 0) = x"00" then
+                            SREG_N(1)<='1';
+                        else
+                            SREG_N(1)<='0';
+                        end if;
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= std_logic_vector(res(7 downto 0));
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_MUL) then
-                    
+                        src1:=signed(R(to_integer(unsigned(ARG_R_DDD))));
+                        src2:=signed(R(to_integer(unsigned(ARG_R_SSS))));
+                        mulres:= (others => '0');
+                        mulres:= src1 * src2;
+                        
+                        if mulres(15 downto 0) = x"0000" then
+                            SREG_N(1)<='1';
+                        else
+                            SREG_N(1)<='0';
+                        end if;
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= std_logic_vector(unsigned(mulres));
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_MULS) then
-                    
-                    elsif std_match(IR, MC_AND) then
-                    
+                        src1:=signed(R(to_integer(unsigned(ARG_R_DDD))));
+                        src2:=signed(R(to_integer(unsigned(ARG_R_SSS))));
+                        mulres:= (others => '0');
+                        mulres:= src1 * src2;
+                        
+                        if mulres(15 downto 0) = x"0000" then
+                            SREG_N(1)<='1';
+                        else
+                            SREG_N(1)<='0';
+                        end if;
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= std_logic_vector(mulres);
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
+                    elsif std_match(IR, MC_AND) then          
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= R(to_integer(unsigned(ARG_R_DDD))) and R(to_integer(unsigned(ARG_R_SSS)));
+                        if R_N(to_integer(unsigned(ARG_R_DDD))) = x"00" then
+                            SREG_N(1)<='1';
+                        else
+                            SREG_N(1)<='0';
+                        end if;
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_OR) then
-                    
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= R(to_integer(unsigned(ARG_R_DDD))) or R(to_integer(unsigned(ARG_R_SSS)));
+                        if R_N(to_integer(unsigned(ARG_R_DDD))) = x"00" then
+                            SREG_N(1)<='1';
+                        else
+                            SREG_N(1)<='0';
+                        end if;
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_XOR) then
-                    
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= R(to_integer(unsigned(ARG_R_DDD))) xor R(to_integer(unsigned(ARG_R_SSS)));
+                        if R_N(to_integer(unsigned(ARG_R_DDD))) = x"00" then
+                            SREG_N(1)<='1';
+                        else
+                            SREG_N(1)<='0';
+                        end if;
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_BSET) then
-                        SREG <= SREG or ARG_I_K;
+                        SREG_N <= SREG or ARG_I_K;
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_BCLR) then
-                        SREG <= SREG and not ARG_I_K;
+                        SREG_N <= SREG and not ARG_I_K;
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_ADCI) then
-                    
+                        src1:=signed(R(to_integer(unsigned(ARG_R_DDD))));
+                        src2:=signed(ARG_I_K);
+                        res:= x"00" & SREG(0);
+                        res:=res + ('0' & src1) + ('0' & src2);
+                        SREG_N(0) <= res(8);
+                        if res(7 downto 0) = x"00" then
+                            SREG_N(1)<='1';
+                        else
+                            SREG_N(1)<='0';
+                        end if;
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= std_logic_vector(unsigned(res(7 downto 0))); 
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_SBCI) then
-                    
+                        src1:=signed(R(to_integer(unsigned(ARG_R_DDD))));
+                        src2:=signed(ARG_I_K);
+                        res:= x"00" & SREG(0);
+                        res:= ('0' & src1) - ('0' & src2) - res;
+                        SREG_N(0) <= res(8);
+                        if res(7 downto 0) = x"00" then
+                            SREG_N(1)<='1';
+                        else
+                            SREG_N(1)<='0';
+                        end if;
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= std_logic_vector(res(7 downto 0));
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_ANDI) then
-                    
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= R(to_integer(unsigned(ARG_R_DDD))) and ARG_I_K;
+                        if R_N(to_integer(unsigned(ARG_R_DDD))) = x"00" then
+                            SREG_N(1)<='1';
+                        else
+                            SREG_N(1)<='0';
+                        end if;
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
+                        
                     elsif std_match(IR, MC_ORI) then
-                    
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= R(to_integer(unsigned(ARG_R_DDD))) or ARG_I_K;
+                        if R_N(to_integer(unsigned(ARG_R_DDD))) = x"00" then
+                            SREG_N(1)<='1';
+                        else
+                            SREG_N(1)<='0';
+                        end if;
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_XORI) then
-                    
+                        R_N(to_integer(unsigned(ARG_R_DDD))) <= R(to_integer(unsigned(ARG_R_DDD))) xor ARG_I_K;
+                        if R_N(to_integer(unsigned(ARG_R_DDD))) = x"00" then
+                            SREG_N(1)<='1';
+                        else
+                            SREG_N(1)<='0';
+                        end if;
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     end if;
             end case;
         end if;
