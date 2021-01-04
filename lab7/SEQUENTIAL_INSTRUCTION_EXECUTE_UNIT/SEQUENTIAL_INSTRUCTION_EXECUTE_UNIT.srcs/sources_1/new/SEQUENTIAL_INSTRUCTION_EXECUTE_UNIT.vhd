@@ -55,6 +55,8 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     constant C_OR: std_logic_vector(9 downto 0) := "0000001000";
     constant MC_XOR: std_logic_vector(15 downto 0) := "0000001001------";
     constant C_XOR: std_logic_vector(9 downto 0) := "0000001001";
+    constant MC_CP: std_logic_vector(15 downto 0) := "0000001010------";
+    constant C_CP: std_logic_vector(9 downto 0) := "0000001010";
     
     constant MC_NOP: std_logic_vector(15 downto 0) := "01000001--------";
     constant C_NOP: std_logic_vector( 7 downto 0) := "01000001";
@@ -64,6 +66,16 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     constant C_B: std_logic_vector( 7 downto 0) := "01000011";
     constant MC_BZ: std_logic_vector(15 downto 0) := "01000100--------";
     constant C_BZ: std_logic_vector( 7 downto 0) := "01000100";
+    constant MC_BSET: std_logic_vector(15 downto 0) := "01000101--------"; 
+    constant C_BSET: std_logic_vector(7 downto 0) := "01000101";
+    constant MC_BCLR: std_logic_vector(15 downto 0) := "01000110--------";
+    constant C_BCLR: std_logic_vector(7 downto 0) := "01000110";
+    constant MC_RB: std_logic_vector(15 downto 0) := "01000111--------";
+    constant C_RB: std_logic_vector(7 downto 0) := "01000111";
+    constant MC_BRBS: std_logic_vector(15 downto 0) := "01001000--------";
+    constant C_BRBS: std_logic_vector(7 downto 0) := "01001000";
+    constant MC_BRBC: std_logic_vector(15 downto 0) := "01001001--------";
+    constant C_BRBC: std_logic_vector(7 downto 0) := "01001001";
     
     constant MC_LDI: std_logic_vector(15 downto 0) := "10000-----------";
     constant C_LDI: std_logic_vector(4 downto 0) := "10000";
@@ -71,10 +83,8 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     constant C_LDS: std_logic_vector(4 downto 0) := "10001";
     constant MC_STS: std_logic_vector(15 downto 0) := "10010-----------";
     constant C_STS: std_logic_vector(4 downto 0) := "10010";
-    constant MC_BSET: std_logic_vector(15 downto 0) := "10011-----------"; 
-    constant C_BSET: std_logic_vector(4 downto 0) := "10011";
-    constant MC_BCLR: std_logic_vector(15 downto 0) := "10100-----------";
-    constant C_BCLR: std_logic_vector(4 downto 0) := "10100";
+    constant MC_CPI: std_logic_vector(15 downto 0) := "10011-----------";
+    constant C_CPI: std_logic_vector(4 downto 0) := "10011"; 
     constant MC_ADCI: std_logic_vector(15 downto 0) := "10101-----------";
     constant C_ADCI: std_logic_vector(4 downto 0) := "10101";
     constant MC_SBCI: std_logic_vector(15 downto 0) := "10110-----------";
@@ -86,15 +96,16 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     constant MC_XORI: std_logic_vector(15 downto 0) := "11001-----------";
     constant C_XORI: std_logic_vector(4 downto 0) := "11001";
     
+    
     constant ROM: rom_array := (
-        C_LDI & "001" & x"35", -- za³adowanie wartoœci x35 do rejestru R1
-        C_LDI & "010" & x"12", -- za³adowanie wartoœci x12 do rejestru R2
-        C_ADC & "010" & "001", -- dodanie zawartoœci rejestru R1 do rejestru R2
-        C_ADCI & "010" & x"21", -- dodanie sta³ej x21 do rejestru R2
-        -- Tutaj nale¿y umieœciæ analogiczny kod, sprawdzaj¹cy dzia³anie
-        -- pozosta³ych zaimplementowanych rozkazów. Nale¿y równie¿ sprawdziæ
-        -- wp³yw flagi C, któr¹ mo¿na modyfikowaæ rozkazami BSET i BCLR
-        C_B & x"00", -- skok do pocz¹tku programu
+        C_LDI & "000" & x"04",
+        C_LDI & "001" & x"02",
+        C_LDI & "010" & x"01",
+        C_MUL & "010" & "000",
+        C_BCLR & x"01",
+        C_SBCI & "001" & x"01",
+        C_BRBC & "11111101",
+        C_B & x"00",
         others => x"0000");
 
 begin
@@ -158,6 +169,30 @@ begin
                     if std_match(IR, MC_LDI) then
                         R_N(to_integer(unsigned(ARG_I_DDD))) <= ARG_I_K;
                         PC_N <= std_logic_vector(unsigned(PC) + 1);
+                    elsif std_match(IR, MC_CP) then
+                        src1:=signed(R(to_integer(unsigned(ARG_R_DDD))));
+                        src2:=signed(R(to_integer(unsigned(ARG_R_SSS))));
+                        res:= x"00" & SREG(0);
+                        res:= ('0' & src1) - ('0' & src2) - res;
+                        SREG_N(0) <= res(8);
+                        if res(7 downto 0) = x"00" then
+                            SREG_N(1)<='1';
+                        else
+                            SREG_N(1)<='0';
+                        end if; 
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
+                    elsif std_match(IR, MC_CPI) then
+                        src1:=signed(R(to_integer(unsigned(ARG_I_DDD))));
+                        src2:=signed(R(to_integer(unsigned(ARG_I_K))));
+                        res:= x"00" & SREG(0);
+                        res:= ('0' & src1) - ('0' & src2) - res;
+                        SREG_N(0) <= res(8);
+                        if res(7 downto 0) = x"00" then
+                            SREG_N(1)<='1';
+                        else
+                            SREG_N(1)<='0';
+                        end if;
+                        PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_MOV) then
                         R_N(to_integer(unsigned(ARG_R_DDD))) <= R(to_integer(unsigned(ARG_R_SSS)));
                         PC_N <= std_logic_vector(unsigned(PC) + 1);
@@ -173,6 +208,22 @@ begin
                     elsif std_match(IR, MC_STS) then
                         RAM_N(to_integer(unsigned(ARG_I_K))) <= R(to_integer(unsigned(ARG_I_DDD)));
                         PC_N <= std_logic_vector(unsigned(PC) + 1);
+                    elsif std_match(IR, MC_BRBS) then
+                    
+                        if SREG(1) = '1' then
+                            PC_N <= std_logic_vector(signed(PC) + signed(ARG_I_K));
+                        else
+                            PC_N <= std_logic_vector(signed(PC) + 1);
+                        end if;
+                        
+                    elsif std_match(IR, MC_BRBC) then
+                    
+                        if SREG(1) = '0' then
+                            PC_N <= std_logic_vector(signed(PC) + signed(ARG_I_K));
+                        else
+                            PC_N <= std_logic_vector(signed(PC) + 1);
+                        end if;
+                    
                     elsif std_match(IR, MC_NOP) then
                         PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_OUTP) then
@@ -180,6 +231,8 @@ begin
                         PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_B) then
                         PC_N <= ARG_I_K;
+                    elsif std_match(IR, MC_RB) then
+                        PC_N <= PC + ARG_I_K;
                     elsif std_match(IR, MC_BZ) then
                         if Z = '1' then
                             PC_N <= ARG_I_K;
@@ -216,7 +269,7 @@ begin
                         src1:=signed(R(to_integer(unsigned(ARG_R_DDD))));
                         src2:=signed(R(to_integer(unsigned(ARG_R_SSS))));
                         mulres:= (others => '0');
-                        mulres:= src1 * src2;
+                        mulres:=signed(unsigned(src1)*unsigned(src2));
                         
                         if mulres(15 downto 0) = x"0000" then
                             SREG_N(1)<='1';
