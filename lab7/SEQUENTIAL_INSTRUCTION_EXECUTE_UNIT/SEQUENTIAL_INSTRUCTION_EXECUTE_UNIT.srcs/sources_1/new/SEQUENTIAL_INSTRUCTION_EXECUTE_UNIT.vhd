@@ -3,25 +3,39 @@ use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.std_logic_unsigned.all;
 use ieee.numeric_std.all;
 entity SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
-    Port (  Z: in std_logic;
+    Port (  INT: in std_logic;
+            Z: in std_logic;
             CLK: in std_logic;
             RESET: in std_logic;
-            GPIO: out std_logic_vector(7 downto 0));
+            IOIN: in std_logic_vector(7 downto 0);
+            IOOUT: out std_logic_vector(7 downto 0);
+            IOADR: out std_logic_vector(7 downto 0);
+            IOWR: out std_logic;
+            IORD: out std_logic
+            );
 end SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT;
 
 architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     type rom_array is array (0 to 31) of std_logic_vector(15 downto 0);
     type reg_array is array (0 to 7) of std_logic_vector(7 downto 0);
     type ram_array is array (0 to 31) of std_logic_vector(7 downto 0);
+    type stack_array is array (0 to 15) of std_logic_vector(7 downto 0);
+    
     
     signal R: reg_array;
     signal R_N: reg_array;
     signal RAM: ram_array;
     signal RAM_N: ram_array;
+    signal STACK: stack_array;
+    signal STACK_N: stack_array;
     signal IR: std_logic_vector(15 downto 0);
     signal IR_N: std_logic_vector(15 downto 0);
     signal SREG: std_logic_vector(7 downto 0);
     signal SREG_N: std_logic_vector(7 downto 0);
+    signal SREGM: std_logic_vector(7 downto 0);
+    signal SREGM_N: std_logic_vector(7 downto 0);
+    signal SPTR: std_logic_vector(3 downto 0) := "0000";
+    signal SPTR_N: std_logic_vector(3 downto 0) := "0000";
     
     alias OPCODE_R: std_logic_vector(9 downto 0) is IR(15 downto 6);
     alias ARG_R_DDD: std_logic_vector(2 downto 0) is IR(5 downto 3);
@@ -29,6 +43,9 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     alias OPCODE_I: std_logic_vector(4 downto 0) is IR(15 downto 11);
     alias ARG_I_DDD: std_logic_vector(2 downto 0) is IR(10 downto 8);
     alias ARG_I_K: std_logic_vector(7 downto 0) is IR(7 downto 0);
+    
+    alias ARG_M_SSS: std_logic_vector(2 downto 0) is IR(2 downto 0);
+    alias ARG_M_K: std_logic_vector(7 downto 0) is IR(10 downto 3);
     
     type STATE_t is (S_FETCH, S_EX);
     signal STATE, STATE_N: STATE_t;
@@ -57,11 +74,13 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     constant C_XOR: std_logic_vector(9 downto 0) := "0000001001";
     constant MC_CP: std_logic_vector(15 downto 0) := "0000001010------";
     constant C_CP: std_logic_vector(9 downto 0) := "0000001010";
+    constant MC_RET: std_logic_vector(15 downto 0) := "0000001011------";
+    constant C_RET: std_logic_vector(9 downto 0) := "0000001011";
+    constant MC_RETI: std_logic_vector(15 downto 0) := "0000001100------";
+    constant C_RETI: std_logic_vector(9 downto 0) := "0000001100";
     
     constant MC_NOP: std_logic_vector(15 downto 0) := "01000001--------";
     constant C_NOP: std_logic_vector( 7 downto 0) := "01000001";
-    constant MC_OUTP: std_logic_vector(15 downto 0) := "01000010--------";
-    constant C_OUTP: std_logic_vector( 7 downto 0) := "01000010";
     constant MC_B: std_logic_vector(15 downto 0) := "01000011--------";
     constant C_B: std_logic_vector( 7 downto 0) := "01000011";
     constant MC_BZ: std_logic_vector(15 downto 0) := "01000100--------";
@@ -76,6 +95,10 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     constant C_BRBS: std_logic_vector(7 downto 0) := "01001000";
     constant MC_BRBC: std_logic_vector(15 downto 0) := "01001001--------";
     constant C_BRBC: std_logic_vector(7 downto 0) := "01001001";
+    constant MC_RCALL: std_logic_vector(15 downto 0) := "01001010--------";
+    constant C_RCALL: std_logic_vector(7 downto 0) := "01001010";
+    constant MC_CALL: std_logic_vector(15 downto 0) := "01001011--------";
+    constant C_CALL: std_logic_vector(7 downto 0) := "01001011";
     
     constant MC_LDI: std_logic_vector(15 downto 0) := "10000-----------";
     constant C_LDI: std_logic_vector(4 downto 0) := "10000";
@@ -96,23 +119,54 @@ architecture Behavioral of SEQUENTIAL_INSTRUCTION_EXECUTE_UNIT is
     constant MC_XORI: std_logic_vector(15 downto 0) := "11001-----------";
     constant C_XORI: std_logic_vector(4 downto 0) := "11001";
     
+    constant MC_OUTP: std_logic_vector(15 downto 0) := "11010-----------";
+    constant C_OUTP: std_logic_vector(4 downto 0) := "11010";
+    constant MC_INP: std_logic_vector(15 downto 0) := "11011-----------";
+    constant C_INP: std_logic_vector(4 downto 0) := "11011";
+    
     
     constant ROM: rom_array := (
-        C_LDI & "000" & x"04",
-        C_LDI & "001" & x"02",
-        C_LDI & "010" & x"01",
-        C_MUL & "010" & "000",
-        C_BCLR & x"01",
-        C_SBCI & "001" & x"01",
-        C_BRBC & "11111101",
+        C_LDI & "001" & x"04",
+        C_OUTP & x"03" & "001",
+        C_INP & "010" & x"55",
+        C_CALL & x"0A",
+        C_LDI & "011" & x"10",
+        C_RCALL & x"05",
+        x"0000",
         C_B & x"00",
-        others => x"0000");
+        x"0000",
+        x"0000",
+        C_LDI & "011" & x"13",
+        C_RET & "000000",    
+        C_LDI & "101" & x"33",
+        C_RETI & "000000",
+        x"0000",
+        x"0000",
+        x"0000",
+        x"0000",
+        x"0000",
+        x"0000",
+        x"0000",
+        x"0000",
+        x"0000",
+        x"0000",
+        x"0000",
+        x"0000",
+        x"0000",
+        x"0000",
+        x"0000",
+        x"0000",
+        x"0000",
+        C_B & x"0c"
+        );
 
 begin
 
     process(CLK, RESET)
     begin
-         if RESET = '1' then
+        if RESET = '1' then
+            STATE <= S_FETCH;
+        elsif INT = '1' then
             STATE <= S_FETCH;
         elsif rising_edge(CLK) then
             STATE <= STATE_N;
@@ -129,46 +183,86 @@ begin
         end case;    
     end process;
     
-    process(CLK, RESET)
+    process(CLK, RESET, INT)
     begin
         if RESET = '1' then
             IR <= (others => '0');
             PC <= (others => '0');
             SREG <= (others => '0');
+            SREGM <= (others => '0');
+            SPTR <= (others => '0');
             for i in 0 to R'high loop
 				R(i) <= x"00";
 			end loop;
-
+            for i in 0 to STACK'high loop
+				STACK(i) <= x"00";
+			end loop;
+		elsif INT = '1' then
+            STACK<=STACK_N;
+            SPTR<=SPTR_N;
+            SREGM<=SREGM_N;
+            SREG<=SREG_N;
+            PC<=PC_N;
         elsif rising_edge(CLK) then
             IR <= IR_N;
             PC <= PC_N;
             R <= R_N;
             SREG <= SREG_N;
-            RAM <= RAM_N;
+            RAM <= RAM_N; 
+            STACK <=STACK_N;
+            SPTR <= SPTR_N;
+            
         end if;
     end process;
     
-    process(RAM, SREG, R, Z, IR, PC, STATE, RESET, PC_N, R_N)
+    process(INT, RAM, SREG, R, Z, IR, PC, STATE, RESET, PC_N, R_N, STACK, STACK_N, SPTR, SPTR_N)
         variable src1, src2: signed(7 downto 0);
         variable res: signed(8 downto 0);
         variable mulres: signed(15 downto 0);
+        variable flag: std_logic := '0';
     begin
         if RESET = '1' then
             IR_N <= (others => '0');
             PC_N <= (others => '0');
             SREG_N <= (others => '0');
+            SPTR_N <= (others => '0');
+            SREGM_N <= (others => '0');
             for i in 0 to R'high loop
-				R_N(i) <= x"00";
+				R_N(i) <= x"00";	
 			end loop;
-
+			for i in 0 to STACK'high loop
+				STACK_N(i) <= x"00";
+			end loop;
+        elsif INT = '1' then
+            STACK_N(to_integer(unsigned(SPTR))) <= PC;
+            SPTR_N <= std_logic_vector(unsigned(SPTR) + 1);
+            SREGM_N <= SREG;
+            SREG_N(7) <= '0';
+            PC_N <= "00011111";
+            
         else
             case(STATE) is
                 when S_FETCH =>
-                    IR_N <= ROM(to_integer(unsigned(PC_N)));
+                    IR_N <= ROM(to_integer(unsigned(PC)));
                 when S_EX =>
                     if std_match(IR, MC_LDI) then
                         R_N(to_integer(unsigned(ARG_I_DDD))) <= ARG_I_K;
                         PC_N <= std_logic_vector(unsigned(PC) + 1);
+                    elsif std_match(IR, MC_RCALL) then
+                        STACK_N(to_integer(unsigned(SPTR)))<= std_logic_vector(unsigned(PC) + 1);
+                        SPTR_N <= std_logic_vector(unsigned(SPTR) + 1);
+                        PC_N <= std_logic_vector(unsigned(PC) + unsigned(ARG_I_K)); --hmmm, powinno dzialaæ
+                    elsif std_match(IR, MC_CALL) then   
+                        STACK_N(to_integer(unsigned(SPTR)))<= std_logic_vector(unsigned(PC) + 1);
+                        SPTR_N <= std_logic_vector(unsigned(SPTR) + 1);
+                        PC_N <= ARG_I_K;
+                    elsif std_match(IR, MC_RET) then
+                        PC_N <= STACK(to_integer(unsigned(SPTR))-1);
+                        SPTR_N <= std_logic_vector(unsigned(SPTR) - 1);
+                    elsif std_match(IR, MC_RETI) then
+                        PC_N <= STACK(to_integer(unsigned(SPTR))-1);
+                        SPTR_N <= std_logic_vector(unsigned(SPTR) - 1);
+                        SREG_N <= SREGM;
                     elsif std_match(IR, MC_CP) then
                         src1:=signed(R(to_integer(unsigned(ARG_R_DDD))));
                         src2:=signed(R(to_integer(unsigned(ARG_R_SSS))));
@@ -227,8 +321,25 @@ begin
                     elsif std_match(IR, MC_NOP) then
                         PC_N <= std_logic_vector(unsigned(PC) + 1);
                     elsif std_match(IR, MC_OUTP) then
-                        GPIO <= ARG_I_K;
-                        PC_N <= std_logic_vector(unsigned(PC) + 1);
+                        IOADR <= ARG_M_K;
+                        IOOUT <= R(to_integer(unsigned(ARG_M_SSS)));
+                        if flag = '0' then
+                            flag := '1'; 
+                        else
+                            IOWR <= '1'; --gdzies trzeba pewnie zerowac, nie zapomnij
+                            PC_N <= std_logic_vector(unsigned(PC) + 1);
+                            flag := '0';
+                        end if;
+                    elsif std_match(IR, MC_INP) then
+                        IOADR <= ARG_I_K;
+                        R_N(to_integer(unsigned(ARG_I_DDD))) <= IOIN;
+                        if flag = '0' then
+                            flag := '1'; 
+                        else
+                            IORD <= '1'; --gdzies trzeba pewnie zerowac, nie zapomnij
+                            PC_N <= std_logic_vector(unsigned(PC) + 1);
+                            flag := '0';
+                        end if;
                     elsif std_match(IR, MC_B) then
                         PC_N <= ARG_I_K;
                     elsif std_match(IR, MC_RB) then
